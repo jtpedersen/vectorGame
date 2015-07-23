@@ -20,15 +20,16 @@ using namespace glm;
 class GameObject {
 public:
     virtual void tick(int dt) {};
-    virtual void render(SDL_Renderer* renderer) {
+    virtual void render(SDL_Renderer* renderer) const {
 	auto pts = vector<SDL_Point>();
-	for(auto p : vertices)
-	    pts.emplace_back( SDL_Point { static_cast<int>(p.x), static_cast<int>(p.y)});
-	SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+	for(auto p : vertices) 
+	    pts.emplace_back(SDL_Point { static_cast<int>(p.x), static_cast<int>(p.y)});
+	SDL_SetRenderDrawColor(renderer, col.r, col.g, col.b, col.a);
 	SDL_RenderDrawLines(renderer, pts.data(), pts.size());
     }
 
     vector<vec2> vertices;
+    SDL_Color col { 255, 255, 255, 255 };
     void applyDelta(vec2 delta) {
 	for_each(begin(vertices), end(vertices), [delta] (vec2& o) { o += delta; });
     }
@@ -37,31 +38,91 @@ public:
 class Player : public GameObject  {
 public:
     Player() {
-	vertices.emplace_back(10,10);
-	vertices.emplace_back(50,10);
-	vertices.emplace_back(50,30);
-	vertices.emplace_back(10,30);
-	vertices.emplace_back(10,10);
+	col.g = col.b = 0;
+	t = 0.0f;
     }
 
-    
+    virtual void tick(int ms) {
+	vertices.clear();
+	vertices.emplace_back(vec2 {400,400} + vec2 {cos(t-.02), sin(t-.02)} * 320.0f);
+	vertices.emplace_back(vec2 {400,400} + vec2 {cos(t), sin(t)} * 310.0f);
+	vertices.emplace_back(vec2 {400,400} + vec2 {cos(t+.02), sin(t+.02)} * 320.0f);
+	vertices.emplace_back(vec2 {400,400} + vec2 {cos(t-.02), sin(t-.02)} * 320.0f);
+    }
 
     void rightPressed() {
-	applyDelta( vec2 { 10, 0});
+	t += .05;
     }
 
     void leftPressed() {
-	applyDelta( vec2 { -10, 0});
+	t -= .05;
     }
 
-};
 
-class Block : public GameObject{
-public:
+
+    float t = 0;
+
+
     
-
 };
 
+class Block : public GameObject {
+public:
+    Block(vec2 origo)
+	: origo(origo) {
+	// an interesting defaultish block
+	static std::random_device rd;
+	static std::mt19937 gen(rd());
+	static std::uniform_real_distribution<> tdist { 0, 6.28 };
+	static std::uniform_real_distribution<> dtdist { 0.3, 2.0 };
+	static std::uniform_real_distribution<> daDist { 0.0, 0.001 };
+	static std::uniform_real_distribution<> coin { 0, 1.0 };
+
+
+	t0 = tdist(gen);
+	dt = dtdist(gen);
+	r1 = 20;
+	w = 20;
+	da = daDist(gen) * ((coin(gen)  > .5) ? 1.0 : -1.0);
+    }
+    Block(vec2 origo, double t0, float dt, float r1, float w) 
+	: origo(origo), t0(t0), dt(dt), w(w), r1(r1), da(0.0001) {
+    }
+
+    virtual void tick(int ms) {
+	vertices.clear();
+	const float stepSize = .13f;
+	auto d0 = vec2 {cos(t0), sin(t0)};
+	auto d1 = vec2 {cos(t0 + dt), sin(t0 + dt)};
+	vertices.emplace_back(origo + r1* d0);
+	vertices.emplace_back(origo + (r1 + w)	* d0);
+
+	for(float t = 0.0f; t < dt; t += stepSize) {
+	    auto dir = vec2 {cos(t0 + t), sin(t0 + t)};
+	    vertices.emplace_back(origo + (r1 + w) * dir);
+	}
+
+	vertices.emplace_back(origo + (r1 + w)	* d1);
+	vertices.emplace_back(origo + r1	* d1);
+	for(float t = dt; t > 0; t -= stepSize) {
+	    auto dir = vec2 {cos(t0 + t), sin(t0 + t)};
+	    vertices.emplace_back(origo + r1  * dir);
+	}
+
+	vertices.emplace_back(origo + r1	* d0);
+
+	t0 += ms * da;
+	r1 += ms/100.0f;
+    }
+    float r1;  // inner radius
+private:
+    vec2 origo; /// emerge point
+    float t0; /// start angle
+    float dt; /// delta angle
+    float w; /// width of block
+    float da; //angular speed
+
+};
 
 
 Player p1;
@@ -74,11 +135,13 @@ void startDisplay(int w, int h) {
 }
 
 
-void renderPlayers() {
-}
-
 
 int main(int argc, char *argv[]) {
+    vector<Block> blocks;
+
+    auto b = Block {vec2{400,400} };
+    blocks.push_back( b);
+
 
     startDisplay(800, 800);
 
@@ -108,11 +171,24 @@ int main(int argc, char *argv[]) {
 
 // display
 	p1.render(renderer);
-
-
+	for_each(begin(blocks), end(blocks), [] (const Block& b) { b.render(renderer);});
+	
 // calc FPS
 	auto end_time = SDL_GetTicks();
 	auto dt = end_time - start_time;
+
+	for_each(begin(blocks), end(blocks), [dt] (Block& b) { b.tick(dt);});
+	p1.tick(dt);
+
+	if (blocks.front().r1 > 400) {
+	    /// far out man
+	    blocks.erase(blocks.begin());
+	}
+	if (blocks.back().r1 > 53) {
+	    // spawn new block
+	    blocks.emplace_back(Block {vec2{400,400} });
+	}
+
 	fps = fps * .9 + .1 * (1000.0 / dt);
 	start_time = end_time;
 
