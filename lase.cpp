@@ -16,7 +16,6 @@
 using namespace std;
 using namespace glm;
 
-
 class GameObject {
 public:
     virtual void tick(int dt) {};
@@ -58,12 +57,7 @@ public:
 	t -= .05;
     }
 
-
-
     float t = 0;
-
-
-    
 };
 
 class Block : public GameObject {
@@ -77,7 +71,6 @@ public:
 	static std::uniform_real_distribution<> dtdist { 0.3, 2.0 };
 	static std::uniform_real_distribution<> daDist { 0.0, 0.001 };
 	static std::uniform_real_distribution<> coin { 0, 1.0 };
-
 
 	t0 = tdist(gen);
 	dt = dtdist(gen);
@@ -173,9 +166,14 @@ int main(int argc, char *argv[]) {
 	p1.render(renderer);
 	for_each(begin(blocks), end(blocks), [] (const Block& b) { b.render(renderer);});
 	
-// calc FPS
 	auto end_time = SDL_GetTicks();
 	auto dt = end_time - start_time;
+        // limit FPS
+        while (dt < 30) {
+            SDL_Delay(10);
+            end_time = SDL_GetTicks();
+            dt = end_time - start_time;
+        }
 
 	for_each(begin(blocks), end(blocks), [dt] (Block& b) { b.tick(dt);});
 	p1.tick(dt);
